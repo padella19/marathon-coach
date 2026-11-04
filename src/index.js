@@ -31,6 +31,11 @@ export default {
         return Response.redirect(st.authUrl(env, `${url.origin}/auth/callback`, state), 302);
       }
       if (p === '/auth/callback') return oauthCallback(url, env, ctx);
+      if (p === '/api/coach/export' && m === 'GET') {
+        const k = url.searchParams.get('k');
+        if (!k || (k !== env.COACH_READ_TOKEN && k !== env.DASH_TOKEN)) return new Response('unauthorized', { status: 401 });
+        return new Response(await coach.exportText(env), { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' } });
+      }
       if (p.startsWith('/api/')) {
         if (!authed(req, env, url)) return json({ error: 'unauthorized' }, 401);
         return await api(p, m, req, env, ctx, url);
@@ -86,15 +91,21 @@ async function oauthCallback(url, env, ctx) {
 }
 
 // ---------- API dashboard ----------
-async function state(env) {
+async function state(env, ctx) {
   const [settings, plan0, overrides, activities, trips, checkins, feed, weekly, tokens, meta] = await Promise.all([
     getSettings(env), get(env, 'plan'), get(env, 'overrides', {}), get(env, 'activities', []), get(env, 'trips', { manual: [], ical: [] }),
     get(env, 'checkins', {}), get(env, 'feed', []), get(env, 'weekly', {}), get(env, 'tokens'), get(env, 'meta', {}),
   ]);
   let plan = plan0;
   if (!plan) { plan = generatePlan(settings); await put(env, 'plan', plan); }
+  const src = sync.source(env);
+  if (src === 'intervals' && !meta?.backfilled && !meta?.backfillStarted) {
+    await put(env, 'meta', { ...meta, backfillStarted: Date.now() });
+    ctx.waitUntil(sync.backfill(env).catch((e) => console.error('backfill', e.message)));
+  }
   return {
-    settings, plan, overrides, activities, trips, checkins, feed, weekly, meta,
+    settings, plan, overrides, activities, trips, checkins, feed, weekly, meta, source: src,
+    intervals: { configured: src === 'intervals' },
     strava: { connected: !!tokens, athlete: tokens?.athlete_name || null, scopeOk: !!tokens?.scope?.includes('activity:read_all'), subscription: meta?.subscription || null },
     ai: !!env.ANTHROPIC_API_KEY, telegram: !!env.TELEGRAM_BOT_TOKEN, serverToday: todayISO(),
   };
@@ -103,7 +114,7 @@ async function state(env) {
 async function api(p, m, req, env, ctx, url) {
   const body = m === 'POST' ? await req.json().catch(() => ({})) : {};
 
-  if (p === '/api/state' && m === 'GET') return json(await state(env));
+  if (p === '/api/state' && m === 'GET') return json(await state(env, ctx));
 
   if (p === '/api/sync' && m === 'POST') {
     const r = await sync.pullRecent(env, 3);
@@ -121,7 +132,7 @@ async function api(p, m, req, env, ctx, url) {
     return json({ ok: true });
   }
 
-  let mm = p.match(/^\/api\/activity\/(\d+)\/rpe$/);
+  let mm = p.match(/^\/api\/activity\/([\w-]+)\/rpe$/);
   if (mm && m === 'POST') {
     const list = await get(env, 'activities', []);
     const a = list.find((x) => String(x.id) === mm[1]);
@@ -130,7 +141,7 @@ async function api(p, m, req, env, ctx, url) {
     await put(env, 'activities', list);
     return json({ ok: true });
   }
-  mm = p.match(/^\/api\/activity\/(\d+)\/analyze$/);
+  mm = p.match(/^\/api\/activity\/([\w-]+)\/analyze$/);
   if (mm && m === 'POST') {
     const a = (await get(env, 'activities', [])).find((x) => String(x.id) === mm[1]);
     if (!a) return json({ error: 'attività non trovata' }, 404);
@@ -192,7 +203,7 @@ async function api(p, m, req, env, ctx, url) {
     const meta = await get(env, 'meta', {}); meta.subscription = r.id; await put(env, 'meta', meta);
     return json(r);
   }
-  if (p === '/api/strava/backfill' && m === 'POST') return json(await sync.backfill(env));
+  if ((p === '/api/strava/backfill' || p === '/api/source/backfill') && m === 'POST') return json(await sync.backfill(env));
 
   return json({ error: 'endpoint sconosciuto' }, 404);
 }
@@ -204,9 +215,9 @@ async function runCron(cron, env) {
     try { await coach.weekly(env, addDays(mondayOf(today), 7)); } catch (e) { console.error('weekly', e.message); }
     return;
   }
-  // Giornaliero: trasferte da iCal + recupero uscite non arrivate col webhook (es. RPE aggiunto dopo)
-  try { await refreshTrips(env); } catch (e) { console.error('trips', e.message); }
-  if (await get(env, 'tokens')) {
+  // Ogni 15': nuove uscite da intervals.icu. Ogni mattina: anche trasferte da iCal.
+  if (cron.startsWith('30 4')) { try { await refreshTrips(env); } catch (e) { console.error('trips', e.message); } }
+  if (sync.source(env) === 'intervals' || (await get(env, 'tokens'))) {
     try {
       const r = await sync.pullRecent(env, 3);
       for (const a of r.added) if (!a.analyzed) await coach.analyzeActivity(env, a);

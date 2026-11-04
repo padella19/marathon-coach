@@ -221,3 +221,20 @@ Rispondi nel campo summary (anche 4-8 frasi se serve), metti KPI solo se utili. 
   }
   return pushFeed(env, { kind: 'answer', question: clean(question, 300), source, error, ...fb });
 }
+
+// 5) Riepilogo in testo per il coach nella chat Claude (sola lettura)
+export async function exportText(env) {
+  const ctx = await buildContext(env);
+  const fb = (await get(env, 'feed', [])).slice(0, 8).map((f) => `${new Date(f.ts).toISOString().slice(0, 10)} [${f.kind}] ${f.headline} — ${f.summary}`);
+  const ci = Object.values(await get(env, 'checkins', {})).slice(-7).map((c) => `${c.date}: sonno ${c.sleep}/5, energia ${c.energy}/5, stress ${c.stress}/5, indolenzimento ${c.soreness}/10${c.pain?.level ? `, fastidio ${c.pain.area} ${c.pain.level}/10` : ''}${c.travel ? ', viaggio' : ''}${c.note ? ' — ' + c.note : ''}`);
+  return [
+    '# MARATHON COACH — STATO ATLETA',
+    `Generato: ${new Date().toISOString()}`,
+    '## Stato', JSON.stringify(ctx.snapshot, null, 1),
+    '## Ultime 6 settimane', ...ctx.lastWeeks,
+    '## Ultime 10 uscite', ...ctx.recent,
+    '## Prossimi 7 giorni (piano effettivo)', ...ctx.next7.map((d) => `${d.date} ${d.giorno}${d.trasferta ? ' [TRASFERTA ' + d.trasferta + ']' : ''}: ${d.sessione}`),
+    '## Check-in recenti', ...(ci.length ? ci : ['nessuno']),
+    '## Ultimi feedback', ...(fb.length ? fb : ['nessuno']),
+  ].join('\n');
+}

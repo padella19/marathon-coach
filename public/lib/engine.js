@@ -220,7 +220,7 @@ export function computeMetrics(acts, s, today) {
 
 // ---------- Fasi del piano ----------
 export const PHASE_FOCUS = {
-  pre: 'Prima del via: scarpe giuste, Garmin collegato a Strava, 2-3 camminate veloci a settimana. Nessuna fretta.',
+  pre: 'Prima del via: scarpe giuste, Garmin collegato a intervals.icu, 2-3 camminate veloci a settimana. Nessuna fretta.',
   cond: 'Abituare tendini, ossa e articolazioni: alternanza corsa/cammino fino a 30\' continui. Il passo non conta, conta la costanza.',
   base: 'Motore aerobico: tanto volume facile in Z2, allunghi per la tecnica e un lavoro "a sensazione" a settimana.',
   build: 'Si costruisce: lungo verso le 2h15, progressivi, salite e tempo run. Forza 2 volte a settimana.',

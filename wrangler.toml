@@ -14,13 +14,14 @@ binding = "ASSETS"
 binding = "KV"
 id = "46ca1335f01a4b25ac142813bf69e1bc"
 
-# Orari in UTC: ogni giorno 04:30 (05:30/06:30 in Italia) + domenica 18:00 focus settimanale
+# Orari in UTC: ogni 15' nuove uscite · ogni giorno 04:30 trasferte · domenica 18:00 focus settimanale
 [triggers]
-crons = ["30 4 * * *", "0 18 * * SUN"]
+crons = ["*/15 * * * *", "30 4 * * *", "0 18 * * SUN"]
 
 [vars]
 CLAUDE_MODEL = "claude-sonnet-5-5"
 
-# Secrets da impostare (NON qui): vedi README
-# STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_VERIFY_TOKEN, DASH_TOKEN, ANTHROPIC_API_KEY
-# opzionali: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# Secrets da impostare dal pannello Cloudflare (NON qui): vedi README
+# obbligatori: DASH_TOKEN, INTERVALS_API_KEY
+# opzionali: INTERVALS_ATHLETE_ID, ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# alternativa a intervals (richiede abbonamento Strava): STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_VERIFY_TOKEN

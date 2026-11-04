@@ -36,7 +36,7 @@ const ACT = {
   async sync() {
     if (S.demo) return toast('Demo: in live scarica le nuove uscite da Strava e avvia l\'analisi del coach.');
     const r = await API.post('/api/sync');
-    toast(r.added ? `${r.added} nuove uscite: analisi del coach in arrivo` : 'Nessuna nuova uscita');
+    toast(r.added ? `${r.added} nuove uscite importate e analizzate` : 'Nessuna nuova uscita');
     await refresh(); burst();
   },
   async checkin(payload) {
@@ -96,7 +96,7 @@ const ACT = {
     await API.post('/api/trips/refresh'); await refresh(); toast('Trasferte aggiornate dal calendario');
   },
   async subscribe() { const r = await API.post('/api/strava/subscribe'); toast(r.existing ? 'Webhook già attivo' : 'Webhook Strava attivato'); await refresh(); },
-  async backfill() { toast('Importo lo storico…'); const r = await API.post('/api/strava/backfill'); toast(`${r.imported} attività importate`); await refresh(); },
+  async backfill() { toast('Importo lo storico…'); const r = await API.post('/api/source/backfill'); toast(`${r.imported} attività importate`); await refresh(); },
 };
 
 // ---------------------------------------------------------------- Calcolo
@@ -142,7 +142,7 @@ function setLive() {
   const el = $('#live');
   if (S.demo) el.innerHTML = '<i class="dot demo"></i><span>Demo · dati di esempio</span>';
   else if (S.err) el.innerHTML = `<i class="dot err"></i><span>${esc(S.err)}</span>`;
-  else el.innerHTML = `<i class="dot on"></i><span>Live · ${S.data.meta?.lastSync ? 'ultima uscita ' + ago(S.data.meta.lastSync) : 'in attesa di uscite'}</span>`;
+  else el.innerHTML = `<i class="dot on"></i><span>Live · ${S.data.meta?.lastSync ? 'controllato ' + ago(S.data.meta.lastSync) : 'in attesa di uscite'}</span>`;
 }
 
 // ---------------------------------------------------------------- Render
@@ -172,12 +172,14 @@ function render() {
 
 function banners() {
   const d = S.data, out = [];
-  if (S.demo) out.push(`<div class="banner"><b>Modalità demo.</b> Dati di esempio a marzo 2027 per mostrarti come lavora la dashboard. In produzione si collega al tuo Worker e a Strava. ${location.protocol.startsWith('http') && !location.hostname.endsWith('claude.ai') && !location.hostname.endsWith('claudeusercontent.com') ? '<button class="btn sm" data-a="gate">Collega il backend</button>' : ''}</div>`);
-  else {
-    if (!d.strava?.connected) out.push(`<div class="banner" data-tone="info"><b>Strava non collegato.</b> Autorizza la lettura delle attività: da lì in poi ogni uscita arriva da sola. <a class="btn sm primary" href="/auth/strava?k=${encodeURIComponent(API.token())}">Collega Strava</a></div>`);
-    else if (!d.strava.scopeOk) out.push('<div class="banner" data-tone="bad">Strava collegato senza il permesso "attività private". Ricollega e lascia spunta la casella delle attività.</div>');
-    else if (!d.strava.subscription) out.push('<div class="banner" data-tone="info">Webhook Strava non attivo: le uscite arrivano solo col sync giornaliero. <button class="btn sm" data-a="subscribe">Attiva sync istantanea</button></div>');
-    if (!d.ai) out.push('<div class="banner" data-tone="info">Coach AI spento: manca la chiave Anthropic sul Worker. Il motore a regole funziona comunque.</div>');
+  if (S.demo) out.push(`<div class="banner"><b>Modalità demo.</b> Dati di esempio a marzo 2027 per mostrarti come lavora la dashboard. In produzione si collega al tuo Worker e alle uscite Garmin. ${location.protocol.startsWith('http') && !location.hostname.endsWith('claude.ai') && !location.hostname.endsWith('claudeusercontent.com') ? '<button class="btn sm" data-a="gate">Collega il backend</button>' : ''}</div>`);
+  else if (d.source === 'intervals') {
+    if (!d.activities?.length) out.push(`<div class="banner" data-tone="info"><b>intervals.icu collegato.</b> ${d.meta?.backfilled ? 'Nessuna uscita negli ultimi 120 giorni: la prima che registri col Garmin arriva qui entro 15 minuti.' : 'Sto importando le uscite degli ultimi 120 giorni, ricarica tra un minuto.'}</div>`);
+  } else if (d.source === 'strava') {
+    if (!d.strava?.connected) out.push(`<div class="banner" data-tone="info"><b>Strava non collegato.</b> <a class="btn sm primary" href="/auth/strava?k=${encodeURIComponent(API.token())}">Collega Strava</a></div>`);
+    else if (!d.strava.subscription) out.push('<div class="banner" data-tone="info">Webhook Strava non attivo. <button class="btn sm" data-a="subscribe">Attiva sync istantanea</button></div>');
+  } else {
+    out.push('<div class="banner" data-tone="bad"><b>Nessuna fonte dati.</b> Aggiungi il secret INTERVALS_API_KEY sul Worker (vedi README): da lì le uscite Garmin arrivano da sole.</div>');
   }
   if (S.ctx.m.hrp.src === 'provvisoria') out.push('<div class="banner" data-tone="info">Zone FC provvisorie (FCmax 185). Inserisci età o FC max nelle impostazioni per tararle. <button class="btn sm" data-a="settings">Imposta</button></div>');
   return out.join('');
@@ -343,8 +345,8 @@ function zbar(a) {
 }
 function activitiesBlock() {
   const acts = [...S.ctx.m.acts].reverse().slice(0, 18), hrp = S.ctx.m.hrp;
-  if (!acts.length) return '<div class="card-h"><h2>Attività</h2></div><div class="empty">Ancora nessuna uscita. Appena registri con Garmin, arriva qui via Strava.</div>';
-  return `<div class="card-h"><h2>Attività</h2><span class="muted small">RPE: scegli il valore dopo ogni uscita, oppure scrivi "RPE 6" nella descrizione su Strava</span></div>
+  if (!acts.length) return '<div class="card-h"><h2>Attività</h2></div><div class="empty">Ancora nessuna uscita. Appena registri col Garmin, arriva qui entro 15 minuti.</div>';
+  return `<div class="card-h"><h2>Attività</h2><span class="muted small">RPE: scegli il valore dopo ogni uscita, oppure inseriscilo sull'orologio o su intervals.icu</span></div>
   <div class="tbl-wrap"><table><thead><tr><th>Data</th><th>Uscita</th><th>Km</th><th>Tempo</th><th>Passo</th><th>FC</th><th>Zone</th><th>RPE</th><th>Carico</th><th>Deriva</th></tr></thead><tbody>
   ${acts.map((a) => { const r = E.rpeOf(a, hrp); return `<tr class="click" data-act="${a.id}">
     <td class="n">${E.fmtDate(a.date)}</td><td><span class="nm" title="${esc(a.name)}">${esc(a.name)}</span></td>
@@ -534,8 +536,8 @@ function settingsDlg() {
     </div>
     <div style="display:grid;gap:8px;border-top:1px dashed var(--line);padding-top:14px"><span class="eyebrow">Collegamenti</span>
       ${S.demo ? '<p class="small muted" style="margin:0">Demo: nessun backend collegato.</p>' : `
-      <p class="small" style="margin:0">Strava: <b>${d.strava?.connected ? 'collegato' + (d.strava.athlete ? ' (' + esc(d.strava.athlete) + ')' : '') : 'non collegato'}</b> · webhook: <b>${d.strava?.subscription ? 'attivo' : 'non attivo'}</b> · coach AI: <b>${d.ai ? 'attivo' : 'spento'}</b> · Telegram: <b>${d.telegram ? 'attivo' : 'spento'}</b></p>
-      <div class="actions"><a class="btn sm" href="/auth/strava?k=${encodeURIComponent(API.token())}">${d.strava?.connected ? 'Ricollega Strava' : 'Collega Strava'}</a><button class="btn sm" data-a="subscribe" type="button">Attiva webhook</button><button class="btn sm" data-a="backfill" type="button">Importa ultimi 120 giorni</button><button class="btn sm ghost" data-a="logout" type="button">Cambia token</button></div>`}
+      <p class="small" style="margin:0">Fonte dati: <b>${d.source === 'intervals' ? 'intervals.icu (Garmin)' : d.source === 'strava' ? 'Strava' : 'nessuna'}</b>${d.meta?.lastSync ? ' · ultimo controllo ' + ago(d.meta.lastSync) : ''} · coach AI: <b>${d.ai ? 'attivo' : 'nella chat Claude'}</b> · Telegram: <b>${d.telegram ? 'attivo' : 'spento'}</b></p>
+      <div class="actions">${d.source === 'strava' ? `<a class="btn sm" href="/auth/strava?k=${encodeURIComponent(API.token())}">Ricollega Strava</a><button class="btn sm" data-a="subscribe" type="button">Attiva webhook</button>` : ''}<button class="btn sm" data-a="backfill" type="button">Reimporta ultimi 120 giorni</button><button class="btn sm ghost" data-a="logout" type="button">Cambia token</button></div>`}
     </div>`, (r) => {
     $('#setForm', r).addEventListener('submit', async (e) => {
       e.preventDefault();
