@@ -399,10 +399,6 @@ async function runCron(cron, env) {
   if (iv.configured(env)) {
     try { const r = await syncNow(env); for (const a of r.fresh) { await coach.analyzeActivity(env, a); await Z.autoTest(env, a).catch((e) => console.error('test', e.message)); } } catch (e) { console.error('sync', e.message); }
   }
-  // Trasferte dal calendario: rilette ogni ora (06-23), così un evento aggiunto in giornata arriva subito
-  if (now.hm >= '06:00' && now.hm <= '23:00') {
-    try { const t = await get(env, 'trips', {}); if (Date.now() - (t.icalUpdated || 0) > 55 * 60e3) await refreshTrips(env); } catch (e) { console.error('trips', e.message); }
-  }
   // Meteo di oggi e domani (Open-Meteo): si rinfresca da solo ogni 3 ore, o subito se cambiano le trasferte
   if (now.hm >= '05:00') {
     try { await Z.refreshMeteo(env); } catch (e) { console.error('meteo', e.message); }
