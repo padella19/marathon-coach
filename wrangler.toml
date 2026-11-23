@@ -1,8 +1,6 @@
 name = "marathon-coach"
 main = "src/index.js"
 compatibility_date = "2026-10-01"
-workers_dev = true
-preview_urls = false
 
 # La dashboard (cartella public) viene servita dallo stesso Worker
 [assets]
@@ -14,14 +12,23 @@ binding = "ASSETS"
 binding = "KV"
 id = "46ca1335f01a4b25ac142813bf69e1bc"
 
-# Orari in UTC: ogni 15' nuove uscite · ogni giorno 04:30 trasferte · domenica 18:00 focus settimanale
+# Un solo cron ogni 10 minuti: nuove uscite da intervals.icu + lavori a orario (ora di Roma):
+# 05:30 trasferte, zone FC e invio al Garmin · 07:00 notifiche rimaste dalla notte ·
+# domenica 19:00 focus settimanale · 21:45 riepilogo serale su Telegram
 [triggers]
-crons = ["*/15 * * * *", "30 4 * * *", "0 18 * * SUN"]
+crons = ["*/10 * * * *"]
+
+# Workers AI: trascrizione delle note vocali in chat (Whisper, quota gratuita). Senza questo blocco il microfono non compare.
+[ai]
+binding = "AI"
 
 [vars]
 CLAUDE_MODEL = "claude-sonnet-5-5"
 
-# Secrets da impostare dal pannello Cloudflare (NON qui): vedi README
-# obbligatori: DASH_TOKEN, INTERVALS_API_KEY
-# opzionali: INTERVALS_ATHLETE_ID, ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-# alternativa a intervals (richiede abbonamento Strava): STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_VERIFY_TOKEN
+# Secrets da impostare (NON qui): vedi README
+# INTERVALS_API_KEY, DASH_TOKEN, MCP_SECRET (connettore per Claude, stringa casuale di almeno 40 caratteri)
+# opzionale: ANTHROPIC_API_KEY (coach via API a pagamento: non serve col connettore)
+# opzionale: INTERVALS_ATHLETE_ID (se manca vale l'atleta della API key)
+# opzionali: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+# Connettore: /mcp con header "Authorization: Bearer <MCP_SECRET>". Il vecchio /mcp/<MCP_SECRET> resta valido
+# in transizione: per spegnerlo aggiungi sotto [vars]  MCP_PATH_AUTH = "off"
