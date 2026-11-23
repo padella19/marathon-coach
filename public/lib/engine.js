@@ -500,7 +500,13 @@ export function allTrips(trips) {
 }
 // Nome da mostrare: la città; il titolo del calendario solo come dettaglio se aggiunge qualcosa
 export const tripName = (t) => (t && (t.city || t.title)) || 'Trasferta';
-export const tripDetail = (t) => (t && t.title && t.city && placeKey(t.title) !== placeKey(t.city) ? t.title : '');
+// Dettaglio: la sede (prima parte del campo Luogo), altrimenti il titolo dell'evento
+export const tripDetail = (t) => {
+  if (!t || !t.city) return '';
+  const loc = String(t.location || '').split(/[,\n]/)[0].trim();
+  const d = loc && placeKey(loc) !== placeKey(t.city) ? loc : t.title && placeKey(t.title) !== placeKey(t.city) ? t.title : '';
+  return d;
+};
 
 // ---------- Città di una trasferta dal calendario ----------
 // Candidati da provare con la geocodifica, nell'ordine: città nell'indirizzo (CAP + città),
